@@ -1,0 +1,948 @@
+{
+  "name": "Personal LinkedIn Jobs - Hourly",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Personal LinkedIn Jobs \u2014 Hourly\nSix developer roles \u00b7 Chennai / Tamil Nadu / Bengaluru\nSelect your own config and output Data Tables before publishing.",
+        "height": 180,
+        "width": 1100
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        0,
+        -260
+      ],
+      "typeVersion": 1,
+      "id": "3fc8c688-c0d3-455a-937e-799b9a6834cf",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "5e7c1116-a479-4ab0-afc6-f6a787c60da5",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {run_started_at: new Date().toISOString()}}];"
+      },
+      "id": "427489bb-3752-4365-9497-202db046a9c5",
+      "name": "Init Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "SELECT_CONFIG_TABLE",
+          "mode": "id"
+        },
+        "returnAll": true
+      },
+      "id": "f4d1ac13-007f-4129-8b8c-9987a207dd59",
+      "name": "Fetch Job Roles",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-active-role",
+              "leftValue": "={{ String($json.active) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7592de15-a2bd-4425-ad43-9328e1605fa6",
+      "name": "Filter Active Roles",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        960,
+        240
+      ],
+      "id": "5cf77f4e-e98c-4437-8869-d00c32209b24",
+      "name": "Inactive Roles"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, i) => ({json: {\n  keywords: String(item.json.keyword || '').replace(/\\+/g, ' ').trim(),\n  location: String(item.json.location || '').trim(),\n  start: 0, page_num: 1, max_pages: 20, time_filter: 'r3600'\n}, pairedItem: {item: i}}));"
+      },
+      "id": "44749957-996b-4c4b-8733-c35750f0763d",
+      "name": "Prepare Searches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "7906f93b-7247-4b6f-a91e-b8ce8d2f482c",
+      "name": "Loop Searches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        240
+      ],
+      "id": "8564ec3e-3d85-402f-990f-7a8375e9779f",
+      "name": "Run Complete"
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds"
+      },
+      "id": "297aadad-4327-4395-8658-fd740f7f2318",
+      "name": "Wait 1s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        0
+      ],
+      "webhookId": "6bcd6892-455b-4a59-8384-c8a599ed55b2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Wait 1s').item.json;\nconst html = $input.first().json.rawHtml;\nif (typeof html !== 'string') throw new Error('Search returned no HTML');\nif (/authwall|captcha|security verification/i.test(html)) throw new Error('LinkedIn blocked the search');\nconst clean = s => String(s || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#39;/g, \"'\").replace(/&quot;/g, '\"').replace(/&nbsp;/g, ' ').replace(/\\s+/g, ' ').trim();\nconst field = (block, cls) => clean((block.match(new RegExp('class=\"[^\"]*' + cls + '[^\"]*\"[^>]*>([\\\\s\\\\S]*?)<\\\\/(?:h3|h4|span|div)', 'i')) || [])[1]);\nconst normalize = s => s.toLowerCase().replace(/full[\\s-]*stack/g, 'fullstack').replace(/front[\\s-]*end/g, 'frontend').replace(/[^a-z0-9]+/g, ' ').trim();\nconst terms = normalize(ctx.keywords).split(' ');\nconst blocks = html.split(/<\\/li>/i).filter(b => /base-card/.test(b));\nif (html.trim() && !blocks.length && !/no results|no jobs/i.test(html)) throw new Error('Unrecognized search response; inspect LinkedIn markup');\nconst now = Date.now(), jobs = [], seen = new Set(), ids = [];\nfor (const b of blocks) {\n const id = (b.match(/urn:li:jobPosting:(\\d+)/) || b.match(/\\/jobs\\/view\\/(?:[^\"?\\s]*-)?(\\d{6,})/ ) || [])[1];\n if (!id) throw new Error('Job card missing ID; inspect LinkedIn markup');\n ids.push(id);\n const title = field(b, 'base-search-card__title');\n if (!terms.every(t => normalize(title).split(' ').includes(t))) continue;\n const location = field(b, 'job-search-card__location');\n if (!/tamil\\s*nadu|chennai|madras|bengaluru|bangalore/i.test(location)) continue;\n const tm = b.match(/<time\\b([^>]*)>([\\s\\S]*?)<\\/time>/i);\n const date = tm ? (tm[1].match(/datetime=\"([^\"]+)\"/) || [])[1] || '' : '';\n const label = clean(tm && tm[2]).toLowerCase();\n let age = NaN;\n if (/T\\d\\d:\\d\\d.*(?:Z|[+-]\\d\\d:\\d\\d)$/i.test(date)) age = now - Date.parse(date);\n else if (/^(just now|moments? ago)$/.test(label)) age = 0;\n else {\n  const rel = label.match(/^(\\d+)\\s*(seconds?|secs?|minutes?|mins?)\\s+ago$/);\n  if (rel) age = Number(rel[1]) * (/^(second|sec)/.test(rel[2]) ? 1000 : 60000);\n }\n if (!Number.isFinite(age) || age < 0 || age >= 3600000 || seen.has(id)) continue;\n seen.add(id);\n jobs.push({job_id:id, job_title:title, job_owner:field(b,'base-search-card__subtitle'),\n  job_link:'https://www.linkedin.com/jobs/view/' + id, job_posted_date:date,\n  job_location:location, posted_ago:label, job_snippet:location + ' | ' + label,\n  source:'LinkedIn', fetched_at:new Date(now).toISOString(), search_keyword:ctx.keywords,\n  dedup_hash:'linkedin:' + id});\n}\nconst signature = ids.join(',');\nif (blocks.length && signature === ctx.previous_signature) throw new Error('LinkedIn repeated a page; pagination stopped');\nreturn [{json:{...ctx, jobs, jobs_count:jobs.length, raw_count:blocks.length, signature}}];"
+      },
+      "id": "8a5bfdd2-0562-4879-8f12-bdc85f1e4062",
+      "name": "Parse Search Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-has-jobs",
+              "leftValue": "={{ $json.jobs_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt",
+                "name": "filter.operator.gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "17c4ff5c-49fb-4c25-b944-0be3a5bf5333",
+      "name": "Has Jobs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all();"
+      },
+      "id": "015e571f-f039-49b2-8b08-e18a8d2b8abf",
+      "name": "Empty Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.first().json.jobs.map(job => ({json: job, pairedItem: {item: 0}}));"
+      },
+      "id": "24ea9dc1-f868-47de-a476-43c606612e91",
+      "name": "Expand Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, index) => {\nvar job = Object.assign({}, $('Has New Jobs?').itemMatching(index).json);\nvar rawData = item.json;\nvar html = rawData.rawHtml || (rawData.data && rawData.data.rawHtml) || '';\n\nif (!html || !/show-more-less-html__markup/.test(html)) throw new Error('Missing job detail content for ' + job.job_id);\n\n// Description from .show-more-less-html__markup\nvar descMatch = html.match(/class\\s*=\\s*\"[^\"]*show-more-less-html__markup[^\"]*\"[^>]*>([\\s\\S]*?)<\\/div>/i);\njob.job_description = descMatch\n  ? descMatch[1].replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 3000)\n  : '';\n\n// Hiring person from linkedin.com/in/ anchor\nvar hirerName = '', hirerUrl = '';\nvar profileMatch = html.match(/<a[^>]+href\\s*=\\s*\"(https?:\\/\\/[^\"]*linkedin\\.com\\/in\\/[^\"]+)\"[^>]*>([\\s\\S]*?)<\\/a>/i);\nif (profileMatch) {\n  hirerUrl = profileMatch[1];\n  var anchorText = profileMatch[2].replace(/<[^>]+>/g, '').replace(/\\s+/g, ' ').trim();\n  if (anchorText) {\n    hirerName = anchorText;\n  }\n}\njob.hiring_person     = hirerName;\njob.hiring_person_url = hirerUrl;\n\n// Job criteria from .description__job-criteria-item blocks\nvar criteria = {};\nvar criteriaRx = /class\\s*=\\s*\"[^\"]*description__job-criteria-item[^\"]*\"([\\s\\S]*?)(?=class\\s*=\\s*\"[^\"]*description__job-criteria-item|<\\/ul|$)/gi;\nvar cMatch;\nwhile ((cMatch = criteriaRx.exec(html)) !== null) {\n  var cBlock = cMatch[1];\n  var lm = cBlock.match(/class\\s*=\\s*\"[^\"]*description__job-criteria-subheader[^\"]*\"[^>]*>([\\s\\S]*?)<\\//i);\n  var vm = cBlock.match(/class\\s*=\\s*\"[^\"]*description__job-criteria-text[^\"]*\"[^>]*>([\\s\\S]*?)<\\//i);\n  if (lm && vm) {\n    var lbl = lm[1].replace(/<[^>]+>/g, '').replace(/\\s+/g, ' ').trim().toLowerCase();\n    var val = vm[1].replace(/<[^>]+>/g, '').replace(/\\s+/g, ' ').trim();\n    if (lbl) criteria[lbl] = val;\n  }\n}\njob.seniority_level = criteria['seniority level'] || '';\njob.employment_type = criteria['employment type'] || '';\njob.job_function    = criteria['job function']    || '';\njob.industries      = criteria['industries']      || '';\n\nreturn {json: job, pairedItem: {item: index}};\n});"
+      },
+      "id": "9bbec867-11c4-4748-bfcc-f4d72ec6f91a",
+      "name": "Parse Detail Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "value": "SELECT_JOBS_TABLE",
+          "mode": "id"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "Job_ID",
+              "keyValue": "={{ $json.job_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        0
+      ],
+      "id": "ea17e214-d017-482a-a0cb-1a57f3da8ba1",
+      "name": "If row does not exist",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9fc991ea-4143-4d5e-bc85-7efa2c49d7de",
+              "leftValue": "={{ $json.dedup_hash }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2880,
+        0
+      ],
+      "id": "8321e17d-694a-4a55-a4d4-b0076182aac4",
+      "name": "Has New Jobs?"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "SELECT_JOBS_TABLE",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Job_Title": "={{ $json.job_title }}",
+            "Job_ID": "={{ $json.job_id }}",
+            "Job_Link": "={{ $json.job_link }}",
+            "Posted_Date": "={{ $json.job_posted_date }}",
+            "Job_Owner": "={{ $json.job_owner }}",
+            "Source": "={{ $json.source }}",
+            "Fetched_At": "={{ $json.fetched_at }}",
+            "Snippet": "={{ $json.job_snippet }}",
+            "Dedup_Hash": "={{ $json.dedup_hash }}",
+            "Job_Description": "={{ $json.job_description }}",
+            "Hiring_Person": "={{ $json.hiring_person }}",
+            "Seniority_Level": "={{ $json.seniority_level }}",
+            "Employment_Type": "={{ $json.employment_type }}",
+            "Job_Function": "={{ $json.job_function }}",
+            "Industries": "={{ $json.industries }}",
+            "Search_Keyword": "={{ $json.search_keyword }}",
+            "hiring_person_url": "={{ $json.hiring_person_url }}",
+            "Job_Location": "={{ $json.job_location }}",
+            "Posted_Ago": "={{ $json.posted_ago }}"
+          },
+          "matchingColumns": [
+            "Job_ID"
+          ],
+          "schema": [
+            {
+              "id": "Job_Title",
+              "displayName": "Job_Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Job_ID",
+              "displayName": "Job_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Job_Description",
+              "displayName": "Job_Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Job_Link",
+              "displayName": "Job_Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Posted_Date",
+              "displayName": "Posted_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Job_Owner",
+              "displayName": "Job_Owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Hiring_Person",
+              "displayName": "Hiring_Person",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "hiring_person_url",
+              "displayName": "hiring_person_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Fetched_At",
+              "displayName": "Fetched_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Snippet",
+              "displayName": "Snippet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Seniority_Level",
+              "displayName": "Seniority_Level",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Employment_Type",
+              "displayName": "Employment_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Job_Function",
+              "displayName": "Job_Function",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Industries",
+              "displayName": "Industries",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Dedup_Hash",
+              "displayName": "Dedup_Hash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Search_Keyword",
+              "displayName": "Search_Keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Job_Location",
+              "displayName": "Job_Location",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Posted_Ago",
+              "displayName": "Posted_Ago",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "8b941fd6-51ac-42e7-878d-2440169d706e",
+      "name": "Insert to Data Table",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        3600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=\" + encodeURIComponent($json.keywords) + \"&location=\" + encodeURIComponent($json.location) + \"&f_TPR=r3600&sortBy=DD&start=\" + $json.start }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": false,
+              "responseFormat": "text",
+              "outputPropertyName": "rawHtml"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "d32da329-3e5f-4a42-a9ff-ba8ff8ccaed2",
+      "name": "Guest API Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/\" + $json.job_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": false,
+              "responseFormat": "text",
+              "outputPropertyName": "rawHtml"
+            }
+          },
+          "timeout": 30000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "02f5dfb6-5e1c-4cc8-965c-93824d874d84",
+      "name": "Guest API Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3120,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "name": "Next Page",
+      "id": "47952577-29b6-4141-9e5b-df2c18a5c26c",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const page = $('Parse Search Page').first().json;\nif (page.raw_count > 0 && page.page_num >= page.max_pages) throw new Error('Pagination cap reached: ' + page.keywords + ' / ' + page.location + '. Review coverage before increasing max_pages.');\nreturn [{json: {keywords:page.keywords, location:page.location, time_filter:'r3600',\n start:page.start + page.raw_count, page_num:page.page_num + 1, max_pages:page.max_pages,\n previous_signature:page.signature, has_more:page.raw_count > 0}}];"
+      }
+    },
+    {
+      "name": "More Pages?",
+      "id": "f325d233-8253-4106-9257-241e733489ff",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-has-jobs",
+              "leftValue": "={{ $json.has_more }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Init Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Run": {
+      "main": [
+        [
+          {
+            "node": "Fetch Job Roles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Job Roles": {
+      "main": [
+        [
+          {
+            "node": "Filter Active Roles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Searches": {
+      "main": [
+        [
+          {
+            "node": "Loop Searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1s": {
+      "main": [
+        [
+          {
+            "node": "Guest API Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guest API Search": {
+      "main": [
+        [
+          {
+            "node": "Parse Search Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Search Page": {
+      "main": [
+        [
+          {
+            "node": "Has Jobs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Jobs": {
+      "main": [
+        [
+          {
+            "node": "If row does not exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If row does not exist": {
+      "main": [
+        [
+          {
+            "node": "Has New Jobs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guest API Details": {
+      "main": [
+        [
+          {
+            "node": "Parse Detail Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Detail Page": {
+      "main": [
+        [
+          {
+            "node": "Insert to Data Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert to Data Table": {
+      "main": [
+        [
+          {
+            "node": "Next Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Empty Page": {
+      "main": [
+        [
+          {
+            "node": "Next Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next Page": {
+      "main": [
+        [
+          {
+            "node": "More Pages?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Active Roles": {
+      "main": [
+        [
+          {
+            "node": "Prepare Searches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Inactive Roles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Searches": {
+      "main": [
+        [
+          {
+            "node": "Run Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 1s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Jobs?": {
+      "main": [
+        [
+          {
+            "node": "Expand Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Empty Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Jobs?": {
+      "main": [
+        [
+          {
+            "node": "Guest API Details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Next Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More Pages?": {
+      "main": [
+        [
+          {
+            "node": "Wait 1s",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "executionTimeout": 3300
+  },
+  "tags": []
+}
